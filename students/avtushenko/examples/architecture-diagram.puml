@@ -1,0 +1,56 @@
+@startuml
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+skinparam rectangle {
+    BackgroundColor White
+    ArrowColor Black
+}
+
+title Гексагональная архитектура: Request Service (ПСО «Юго-Запад»)
+
+' ================= INFRASTRUCTURE LAYER =================
+package "Infrastructure Layer\n(Адаптеры)" as Infra {
+    component [REST Controller\n(RequestController)] as Controller
+    component [InMemory Repository\n(RequestRepositoryAdapter)] as RepoAdapter
+    component [Console Notification\n(NotificationAdapter)] as NotifAdapter
+    component [DI Container\n(DependencyInjection)] as DI
+}
+
+' ================= APPLICATION LAYER =================
+package "Application Layer\n(Порты и Сервис)" as App {
+    package "Inbound Ports" as InPorts {
+        interface [CreateRequestUseCase] as CreatePort
+    }
+    package "Outbound Ports" as OutPorts {
+        interface [IRequestRepository] as RepoPort
+        interface [INotificationService] as NotifPort
+    }
+    component [Request Service\n(Оркестратор)] as Service
+}
+
+' ================= DOMAIN LAYER =================
+package "Domain Layer\n(Бизнес-логика)" as Domain {
+    entity [Request\n(Заявка)] as Req
+    entity [Group\n(Группа)] as Grp
+    entity [Zone\n(Зона поиска)] as Zone
+}
+
+' ================= RELATIONSHIPS =================
+Controller --> CreatePort : invokes
+Service ..> CreatePort : implements
+
+Service --> Req : creates/manages
+Service --> Grp : forms
+Service --> Zone : assigns
+
+Service --> RepoPort : saves/finds
+Service --> NotifPort : sends notifications
+
+RepoAdapter ..> RepoPort : implements
+NotifAdapter ..> NotifPort : implements
+
+DI --> Service : configures
+DI --> RepoAdapter : configures
+DI --> NotifAdapter : configures
+
+@endumlв
