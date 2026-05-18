@@ -1,0 +1,101 @@
+@startuml
+title Успешный сценарий: Прохождение курса и сдача теста
+
+actor "Студент" as Student
+participant "Клиент (Web/Mobile)" as Client
+participant "API Gateway" as Gateway
+database "PostgreSQL" as DB
+participant "Video CDN" as CDN
+participant "Test Module" as TestSvc
+queue "Event Bus\n(RabbitMQ)" as Bus
+participant "Notification\nService" as Notify
+
+== Транзакция №1: Запуск и просмотр видео ==
+
+Student -> Client: Нажимает "Начать обучение"
+activate Client
+
+Client -> Gateway: POST /api/courses/{id}/start
+activate Gateway
+
+Gateway -> Gateway: Аутентификация\nи проверка прав
+Gateway -> DB: INSERT progress\n(course_id='C-101', status='IN_PROGRESS')
+activate DB
+DB --> Gateway: OK (id='P-99')
+deactivate DB
+
+Gateway --> Client: 200 OK\n{status: "IN_PROGRESS"}
+deactivate Gateway
+
+Client -> CDN: GET /video/lesson-01.mp4
+activate CDN
+CDN --> Client: 200 OK\n(Video Stream)
+deactivate CDN
+
+note over Client, Student
+  Студент смотрит видео.
+  Прогресс отправляется в фоне.
+end note
+
+Client -> Gateway: PATCH /api/progress\n{video_progress: 100%}
+activate Gateway
+Gateway -> DB: UPDATE progress\nSET video_percent=100
+DB --> Gateway: OK
+Gateway --> Client: 200 OK\n{test_unlocked: true}
+deactivate Gateway
+
+== Транзакция №2: Сдача теста ==
+
+Student -> Client: Отвечает на вопросы\nи нажимает "Завершить тест"
+Client -> Gateway: POST /api/tests/submit\n{answers: [...]}
+activate Gateway
+
+Gateway -> TestSvc: ValidateAndGrade(answers)
+activate TestSvc
+
+TestSvc -> TestSvc: Проверка ответов\nРасчёт баллов
+TestSvc --> Gateway: Result: score=80%, passed=true
+deactivate TestSvc
+
+Gateway -> DB: BEGIN TRANSACTION
+activate DB
+Gateway -> DB: UPDATE progress\nSET status='COMPLETED', score=80%
+Gateway -> DB: INSERT test_result\n(score=80%, attempts=1)
+DB --> Gateway: Committed
+deactivate DB
+
+Gateway -> Bus: publish(CourseCompleted,\nuser='U-42', badge='B-01')
+activate Bus
+Bus --> Gateway: ACK
+deactivate Bus
+
+Gateway --> Client: 200 OK\n{score: "80%", passed: true,\nbadge: "Основы дизайна"}
+deactivate Gateway
+
+note over Student
+  Тест пройден!
+  Бейдж добавлен в профиль.
+end note
+
+== Шаг 3: Асинхронное уведомление и комментарий ==
+
+Bus -> Notify: consume(CourseCompleted)
+activate Notify
+Notify -> Notify: Формирование push/email
+Notify --> Student: 📱 Push: "Поздравляем!\nВы успешно прошли курс!"
+deactivate Notify
+
+Student -> Client: Оставляет комментарий:\n"Коротко и по делу, спасибо!"
+Client -> Gateway: POST /api/comments\n{course_id: 'C-101', text: '...'}
+activate Gateway
+Gateway -> DB: INSERT comment\n(user='U-42', text='...')
+activate DB
+DB --> Gateway: OK
+deactivate DB
+Gateway --> Client: 201 Created\n{comment_id: 'COM-88'}
+deactivate Gateway
+
+Client --> Student: Комментарий опубликован ✅
+deactivate Client
+
+' @enduml

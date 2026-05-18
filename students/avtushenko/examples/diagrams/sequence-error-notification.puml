@@ -1,0 +1,110 @@
+@startuml
+title Сценарий с ошибкой: Notification Service недоступен
+
+actor "Студент" as Student
+participant "API Gateway" as Gateway
+participant "Course Service" as CourseSvc
+database "PostgreSQL" as DB
+queue "Event Bus\n(RabbitMQ)" as Bus
+participant "Notification\nWorker" as NotifyWorker
+participant "Push Service\n(Firebase)" as Push
+
+note over Student, Push
+  Студент сдал тест.
+  Система пытается отправить уведомление.
+end note
+
+Student -> Gateway: POST /api/tests/submit\n{course_id: "C-101", answers: [...]}
+activate Gateway
+
+Gateway -> CourseSvc: Пересылка запроса
+activate CourseSvc
+
+CourseSvc -> CourseSvc: Валидация ответов\nи расчёт баллов
+
+CourseSvc -> DB: BEGIN TRANSACTION
+activate DB
+
+CourseSvc -> DB: UPDATE progress\nSET status='COMPLETED', score=80%
+DB --> CourseSvc: OK
+
+CourseSvc -> DB: INSERT test_result\n(score=80%, attempts=1)
+DB --> CourseSvc: OK
+
+CourseSvc -> DB: COMMIT TRANSACTION
+DB --> CourseSvc: Committed
+deactivate DB
+
+note over CourseSvc
+  Тест принят. Прогресс сохранён.
+  Генерация события асинхронна.
+end note
+
+CourseSvc -> Bus: publish(CourseCompleted,\nuser_id='U-42', badge='B-01')
+activate Bus
+Bus --> CourseSvc: ACK
+deactivate Bus
+
+CourseSvc --> Gateway: 200 OK\n{score: "80%", passed: true}
+deactivate CourseSvc
+
+Gateway --> Student: 200 OK\n"Курс пройден!"
+deactivate Gateway
+
+== Асинхронная обработка уведомлений ==
+
+Bus -> NotifyWorker: consume(CourseCompleted)
+activate NotifyWorker
+
+NotifyWorker -> NotifyWorker: Формирование\nсписка уведомлений
+
+NotifyWorker -> Push: sendPush(user_id,\n"Поздравляем! Вы прошли курс.")
+activate Push
+
+note over Push
+  Push Service недоступен!
+  Connection timeout 10s
+end note
+
+Push --> NotifyWorker: Timeout Exception
+deactivate Push
+
+NotifyWorker -> NotifyWorker: Обработка ошибки:\n- НЕ откатываем прогресс\n- Помещаем в retry queue
+
+NotifyWorker -> DB: INSERT INTO notification_queue\n(user_id='U-42', status='pending',\nretry_count=0, next_retry_at=NOW()+5min)
+activate DB
+DB --> NotifyWorker: OK
+deactivate DB
+
+NotifyWorker -> Bus: publish(NotificationFailed,\nuser_id='U-42', reason='Push timeout')
+activate Bus
+Bus --> NotifyWorker: ACK
+deactivate Bus
+
+note over NotifyWorker
+  Ожидание повторной попытки...
+  (Задержка 5 минут)
+end note
+
+NotifyWorker -> DB: SELECT * FROM notification_queue\nWHERE status='pending'\nAND next_retry_at <= NOW()
+activate DB
+DB --> NotifyWorker: 1 запись\n(user_id='U-42')
+deactivate DB
+
+NotifyWorker -> Push: sendPush(user_id, ...)
+activate Push
+Push --> NotifyWorker: Message-ID: msg-456\nStatus: sent
+deactivate Push
+
+NotifyWorker -> DB: UPDATE notification_queue\nSET status='delivered',\ndelivered_at=NOW()
+activate DB
+DB --> NotifyWorker: OK
+deactivate DB
+
+note over NotifyWorker
+  Уведомление доставлено успешно!
+end note
+
+deactivate NotifyWorker
+
+@enduml
