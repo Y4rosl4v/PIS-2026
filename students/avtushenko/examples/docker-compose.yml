@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: quick_courses_db
+    environment:
+      POSTGRES_USER: ${DB_USER:-quickcourses}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${DB_NAME:-quick_courses}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quickcourses}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - courses_network
+
+  app:
+    build: .
+    container_name: quick_courses_app
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-quickcourses}:${DB_PASSWORD:-secretpassword}@db:5432/${DB_NAME:-quick_courses}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./app:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - courses_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: quick_courses_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - courses_network
+
+volumes:
+  postgres_data:
+
+networks:
+  courses_network:
+    driver: bridge
