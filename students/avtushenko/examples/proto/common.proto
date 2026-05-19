@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package quickcourses;
+
+// Общий статус операции
+message Status {
+  bool success = 1;
+  string message = 2;
+  int32 code = 3;
+}
+
+// Информация о прогрессе
+message Progress {
+  int32 percent = 1;
+  repeated string completed_lessons = 2;
+  bool is_completed = 3;
+}
+
+// Timestamp (ISO 8601)
+message Timestamp {
+  string value = 1;
+}

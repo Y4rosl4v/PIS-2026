@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package quickcourses;
+
+// Сервис управления курсами
+service CourseService {
+  // Создать новый курс
+  rpc CreateCourse(CreateCourseRequest) returns (CreateCourseResponse);
+  
+  // Получить курс по ID
+  rpc GetCourse(GetCourseRequest) returns (Course);
+  
+  // Получить список курсов
+  rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
+  
+  // Обновить рейтинг курса
+  rpc UpdateRating(UpdateRatingRequest) returns (Course);
+  
+  // Добавить урок в курс
+  rpc AddLesson(AddLessonRequest) returns (Lesson);
+  
+  // Server-side streaming: получить обновления курсов в реальном времени
+  rpc StreamCourseUpdates(StreamCourseRequest) returns (stream CourseUpdate);
+}
+
+// Запрос на создание курса
+message CreateCourseRequest {
+  string title = 1;
+  string description = 2;
+}
+
+// Ответ при создании курса
+message CreateCourseResponse {
+  string course_id = 1;
+  Status status = 2;
+}
+
+// Запрос получения курса по ID
+message GetCourseRequest {
+  string course_id = 1;
+}
+
+// Запрос списка курсов
+message ListCoursesRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+  optional float min_rating = 3;
+}
+
+// Ответ со списком курсов
+message ListCoursesResponse {
+  repeated Course courses = 1;
+  int32 total = 2;
+}
+
+// Запрос на обновление рейтинга
+message UpdateRatingRequest {
+  string course_id = 1;
+  float rating = 2;
+}
+
+// Запрос на добавление урока
+message AddLessonRequest {
+  string course_id = 1;
+  string title = 2;
+  string video_url = 3;
+  optional TestQuestion test = 4;
+}
+
+// Вопрос теста
+message TestQuestion {
+  string text = 1;
+  repeated string options = 2;
+  int32 correct_option_index = 3;
+}
+
+// Урок
+message Lesson {
+  string id = 1;
+  string course_id = 2;
+  string title = 3;
+  string video_url = 4;
+  optional TestQuestion test = 5;
+  string created_at = 6;
+}
+
+// Курс
+message Course {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  optional float rating = 4;
+  repeated Lesson lessons = 5;
+  int32 total_lessons = 6;
+  int32 total_students = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}
+
+// Запрос на подписку на обновления
+message StreamCourseRequest {
+  optional string course_id = 1;  // Если не указан - все курсы
+}
+
+// Обновление курса
+message CourseUpdate {
+  string course_id = 1;
+  UpdateType update_type = 2;
+  optional Course course = 3;
+  optional int32 new_total_students = 4;
+  optional float new_rating = 5;
+  string timestamp = 6;
+}
+
+enum UpdateType {
+  COURSE_CREATED = 0;
+  COURSE_UPDATED = 1;
+  RATING_CHANGED = 2;
+  STUDENT_ENROLLED = 3;
+}

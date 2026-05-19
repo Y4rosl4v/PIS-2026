@@ -1,0 +1,164 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package quickcourses;
+
+// Сервис управления записями и прогрессом
+service EnrollmentService {
+  // Записать студента на курс
+  rpc EnrollStudent(EnrollStudentRequest) returns (EnrollStudentResponse);
+  
+  // Получить запись по ID
+  rpc GetEnrollment(GetEnrollmentRequest) returns (Enrollment);
+  
+  // Получить прогресс студента
+  rpc GetStudentProgress(GetStudentProgressRequest) returns (StudentProgress);
+  
+  // Завершить урок
+  rpc CompleteLesson(CompleteLessonRequest) returns (CompleteLessonResponse);
+  
+  // Пройти тест
+  rpc PassTest(PassTestRequest) returns (PassTestResponse);
+  
+  // Server-side streaming: отслеживание прогресса в реальном времени
+  rpc StreamProgress(StreamProgressRequest) returns (stream ProgressUpdate);
+  
+  // Client-side streaming: массовая запись студентов
+  rpc BatchEnroll(stream EnrollStudentRequest) returns (BatchEnrollResponse);
+  
+  // Bidirectional streaming: интерактивное отслеживание прогресса
+  rpc InteractiveProgress(stream ProgressCommand) returns (stream ProgressUpdate);
+}
+
+// Запрос на запись студента
+message EnrollStudentRequest {
+  string student_id = 1;
+  string course_id = 2;
+}
+
+// Ответ на запись
+message EnrollStudentResponse {
+  string enrollment_id = 1;
+  Status status = 2;
+}
+
+// Запрос получения записи
+message GetEnrollmentRequest {
+  string enrollment_id = 1;
+}
+
+// Запрос прогресса студента
+message GetStudentProgressRequest {
+  string student_id = 1;
+  optional string course_id = 2;  // Если не указан - все курсы
+}
+
+// Прогресс студента
+message StudentProgress {
+  string student_id = 1;
+  repeated CourseProgress courses = 2;
+  float average_progress = 3;
+  int32 total_courses = 4;
+  int32 completed_courses = 5;
+}
+
+// Прогресс по курсу
+message CourseProgress {
+  string course_id = 1;
+  string course_title = 2;
+  Progress progress = 3;
+  string started_at = 4;
+  optional string completed_at = 5;
+  string last_activity = 6;
+}
+
+// Запись на курс
+message Enrollment {
+  string id = 1;
+  string student_id = 2;
+  string course_id = 3;
+  Progress progress = 4;
+  string started_at = 5;
+  optional string completed_at = 6;
+  string updated_at = 7;
+}
+
+// Запрос на завершение урока
+message CompleteLessonRequest {
+  string enrollment_id = 1;
+  string lesson_id = 2;
+}
+
+// Ответ на завершение урока
+message CompleteLessonResponse {
+  bool success = 1;
+  int32 new_progress = 2;
+  string message = 3;
+}
+
+// Запрос на прохождение теста
+message PassTestRequest {
+  string enrollment_id = 1;
+  string lesson_id = 2;
+  int32 selected_option = 3;
+}
+
+// Ответ на тест
+message PassTestResponse {
+  bool passed = 1;
+  string message = 2;
+}
+
+// Запрос на подписку на прогресс
+message StreamProgressRequest {
+  string student_id = 1;
+  optional string course_id = 2;
+}
+
+// Обновление прогресса
+message ProgressUpdate {
+  string enrollment_id = 1;
+  string student_id = 2;
+  string course_id = 3;
+  string course_title = 4;
+  int32 progress_percent = 5;
+  string last_completed_lesson = 6;
+  string timestamp = 7;
+}
+
+// Команда для bidirectional streaming
+message ProgressCommand {
+  oneof command {
+    StartTracking start = 1;
+    StopTracking stop = 2;
+    GetStatus status = 3;
+  }
+}
+
+message StartTracking {
+  string student_id = 1;
+  string course_id = 2;
+}
+
+message StopTracking {
+  string student_id = 1;
+}
+
+message GetStatus {
+  string student_id = 1;
+}
+
+// Ответ на массовую запись
+message BatchEnrollResponse {
+  int32 total = 1;
+  int32 succeeded = 2;
+  int32 failed = 3;
+  repeated EnrollmentError errors = 4;
+}
+
+message EnrollmentError {
+  string student_id = 1;
+  string course_id = 2;
+  string error = 3;
+}
